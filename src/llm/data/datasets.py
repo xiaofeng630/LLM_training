@@ -247,8 +247,7 @@ class GPTDataset_bins(Dataset):
         return input_ids, target_ids
 
 
-def create_dataloader_txt(txt, batch_size=4, max_length=256, stride=128, 
-                          shuffle=True, drop_last=True, num_workers=0):
+def create_dataloader_txt(txt, batch_size=4, max_length=256, stride=128, shuffle=True, drop_last=True, num_workers=0):
     tokenizer = tiktoken.get_encoding("cl100k_base")
     dataset = GPTDataset_txt(txt, tokenizer, max_length, stride)
     dataloader = DataLoader(dataset, batch_size=batch_size, 
@@ -256,8 +255,7 @@ def create_dataloader_txt(txt, batch_size=4, max_length=256, stride=128,
                             num_workers=num_workers)
     return dataloader
 
-def create_dataloader_jsonl(jsonl_path, batch_size=4, max_length=256, stride=128, 
-                          shuffle=True, drop_last=True, num_workers=0):
+def create_dataloader_jsonl(jsonl_path, batch_size=4, max_length=256, stride=128, shuffle=True, drop_last=True, num_workers=0):
     tokenizer = tiktoken.get_encoding("cl100k_base")
     dataset = GPTDataset_jsonl(jsonl_path, tokenizer, max_length, stride)
     dataloader = DataLoader(dataset, batch_size=batch_size, 
@@ -265,8 +263,7 @@ def create_dataloader_jsonl(jsonl_path, batch_size=4, max_length=256, stride=128
                             num_workers=num_workers)
     return dataloader
 
-def create_dataloader_jsonls(jsonls_path, batch_size=4, max_length=256, stride=128, 
-                             shuffle=True, drop_last=True, num_workers=0):
+def create_dataloader_jsonls(jsonls_path, batch_size=4, max_length=256, stride=128, shuffle=True, drop_last=True, num_workers=0):
     tokenizer = tiktoken.get_encoding("cl100k_base")
     dataset = GPTDataset_jsonls(jsonls_path, tokenizer, max_length, stride)
     dataloader = DataLoader(dataset, batch_size=batch_size, 
@@ -274,16 +271,14 @@ def create_dataloader_jsonls(jsonls_path, batch_size=4, max_length=256, stride=1
                             num_workers=num_workers)
     return dataloader
 
-def create_dataloader_bin(bin_path, batch_size=4, max_length=256, stride=128, 
-                             shuffle=True, drop_last=True, num_workers=0):
+def create_dataloader_bin(bin_path, batch_size=4, max_length=256, stride=128, shuffle=True, drop_last=True, num_workers=0):
     dataset = GPTDataset_bin(bin_path, max_length, stride)
     dataloader = DataLoader(dataset, batch_size=batch_size, 
                             shuffle=shuffle, drop_last=drop_last, 
                             num_workers=num_workers)
     return dataloader
 
-def create_dataloader_bins(bins_path, batch_size=4, max_length=256, stride=128, 
-                             shuffle=True, drop_last=True, num_workers=0):
+def create_dataloader_bins(bins_path, batch_size=4, max_length=256, stride=128, shuffle=True, drop_last=True, num_workers=0):
     dataset = GPTDataset_bins(bins_path, max_length, stride)
     dataloader = DataLoader(dataset, batch_size=batch_size, 
                             shuffle=shuffle, drop_last=drop_last, 
