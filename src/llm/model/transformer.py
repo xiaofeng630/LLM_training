@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-from src.llm.model.attention import MultiHeadAttention
+from .attention import MultiHeadAttention
 
 class LayerNorm(nn.Module):     
     def __init__(self, emb_dim):         
