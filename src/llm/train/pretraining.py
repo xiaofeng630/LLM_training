@@ -6,105 +6,13 @@ import torch
 from src.llm.model.gpt import GPTModel
 from src.llm.data.datasets import create_dataloader_jsonls, create_dataloader_bin, create_dataloader_bins
 from src.llm.utils.logger import setup_logger, setup_run_dir
+from src.llm.eval.tokenizer import token_ids_to_text, text_to_token_ids
+from src.llm.train.loss import calc_loss_batch, calc_loss_loader
+from src.llm.eval.generate import generate_text_simple_old, generate_text_token, generate_and_print_sample
 import tiktoken
 
 run_dir = setup_run_dir(experiment="pretraining", run_name="gpt124m")
 logger = setup_logger(name="train", log_file=run_dir / "train.log")
-
-def text_to_token_ids(text, tokenizer):     
-    encoded = tokenizer.encode(text, allowed_special={'<|endoftext|>'})     
-    encoded_tensor = torch.tensor(encoded).unsqueeze(0) 
-    return encoded_tensor
-
-def token_ids_to_text(token_ids, tokenizer):     
-    flat = token_ids.squeeze(0)   
-    return tokenizer.decode(flat.tolist())
-
-def calc_loss_batch(input_batch, target_batch, model, device):     
-    input_batch = input_batch.to(device)     
-    target_batch = target_batch.to(device) .to(device)
-    logits = model(input_batch) 
-    loss = torch.nn.functional.cross_entropy( 
-        logits.flatten(0, 1), target_batch.flatten()     
-    )
-    return loss 
-
-def calc_loss_loader(data_loader, model, device, num_batches=None):     
-    total_loss = 0     
-    if len(data_loader) == 0:         
-        return float("nan")      
-    elif num_batches is None: 
-        num_batches = len(data_loader) 
-    else:         
-        num_batches = min(num_batches, len(data_loader))     
-    for i, (input_batch, target_batch) in enumerate(data_loader):         
-        if i < num_batches:             
-            loss = calc_loss_batch(                 
-                input_batch, target_batch, model, device             
-            )              
-            total_loss += loss.item()          
-        else: 
-            break 
-    return total_loss / num_batches
-
-def generate_text_simple(model, idx, max_new_tokens, context_size, temperature=1.0, top_k=50, top_p=0.9, repetition_penalty=1.2):
-    for _ in range(max_new_tokens):
-        idx_cond = idx[:, -context_size:]
-        
-        with torch.no_grad():
-            logits = model(idx_cond)
-        
-        logits = logits[:, -1, :]
-        
-        # 1. 应用重复惩罚
-        if repetition_penalty != 1.0:
-            for token_id in set(idx[0].tolist()):
-                logits[0, token_id] /= repetition_penalty
-        
-        # 2. 应用温度
-        logits = logits / temperature
-        
-        # 3. Top-k过滤
-        if top_k > 0:
-            indices_to_remove = logits < torch.topk(logits, top_k)[0][..., -1, None]
-            logits[indices_to_remove] = -float('Inf')
-        
-        # 4. Top-p (nucleus) 过滤
-        if top_p < 1.0:
-            sorted_logits, sorted_indices = torch.sort(logits, descending=True)
-            cumulative_probs = torch.cumsum(torch.softmax(sorted_logits, dim=-1), dim=-1)
-            
-            # 移除累积概率超过top_p的token
-            sorted_indices_to_remove = cumulative_probs > top_p
-            sorted_indices_to_remove[..., 1:] = sorted_indices_to_remove[..., :-1].clone()
-            sorted_indices_to_remove[..., 0] = 0
-            
-            indices_to_remove = sorted_indices_to_remove.scatter(
-                1, sorted_indices, sorted_indices_to_remove
-            )
-            logits[indices_to_remove] = -float('Inf')
-        
-        # 5. 采样而非贪婪选择
-        probas = torch.softmax(logits, dim=-1)
-        idx_next = torch.multinomial(probas, num_samples=1)
-        
-        idx = torch.cat((idx, idx_next), dim=1)
-    
-    return idx
-
-def generate_and_print_sample(model, tokenizer, device, start_context):     
-    model.eval()     
-    context_size = model.pos_emb.weight.shape[0]     
-    encoded = text_to_token_ids(start_context, tokenizer).to(device)     
-    with torch.no_grad():         
-        token_ids = generate_text_simple(             
-            model=model, idx=encoded,             
-            max_new_tokens=50, context_size=context_size         
-        )     
-    decoded_text = token_ids_to_text(token_ids, tokenizer) 
-    decoded_text = decoded_text.replace("\n", " ")
-    model.train()
-    return decoded_text
 
 def evaluate_model(model, train_loader, val_loader, device, eval_iter):     
     model.eval()     
@@ -164,6 +72,13 @@ def train_model_simple(model, train_loader, val_loader, optimizer, device, num_e
                       f"Val loss {val_loss:.3f}\n"
                       f"{sample_text}"               
                      )
+            
+            if global_step % 100000 == 0:
+                ckpt_path = run_dir / "checkpoints" / f"model_epoch{epoch + 1}_step{global_step}.pt"
+                optimizer_path = run_dir / "checkpoints" / f"optimizer_epoch{epoch + 1}_step{global_step}.pt"
+                torch.save(model.state_dict(), ckpt_path)
+                torch.save(optimizer.state_dict(), optimizer_path)
+                logger.info(f"epoch{epoch + 1}_step{global_step}, Weigths saved successfully")
         
         if (epoch + 1) % save_epoch == 0:
             ckpt_path = run_dir / "checkpoints" / f"model_epoch{epoch + 1}.pt"
@@ -194,14 +109,16 @@ if __name__ == "__main__":
     model.eval()
     start_context = "早上出门的时候我才发现忘记带钥匙，只好又回到家里。"
     tokenizer = tiktoken.get_encoding("cl100k_base")
-    print(tokenizer.max_token_value)
-    token_ids = generate_text_simple(
+    token_ids = generate_text_token(
         model=model,     
         idx=text_to_token_ids(start_context, tokenizer),     
         max_new_tokens=20,     
         context_size=GPT_CONFIG_124M["context_length"] 
     ) 
     print("test model output:\n", token_ids_to_text(token_ids, tokenizer))
+
+
+
 
     ## 数据加载器
     train_loader = create_dataloader_bins(     
@@ -213,7 +130,6 @@ if __name__ == "__main__":
         shuffle=True,     
         num_workers=0 
     ) 
-    print(len(train_loader))
 
     val_loader = create_dataloader_bins(     
         "/home/hjzd/lzz/LLM_training/data/CCI3/data_bin/val",     
@@ -227,18 +143,24 @@ if __name__ == "__main__":
 
 
     ## 开始训练
-    device = torch.device("cuda:3" if torch.cuda.is_available() else "cpu") 
-    model = GPTModel(GPT_CONFIG_124M) 
-    model.to(device) 
-    optimizer = torch.optim.AdamW( 
-        model.parameters(), 
-        lr=0.0004, 
-        weight_decay=0.1 
-    )
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu") 
+    model = GPTModel(GPT_CONFIG_124M)
+    model.to(device)
+    optimizer = torch.optim.AdamW(model.parameters(), lr=5e-4, weight_decay=0.1)
+
+
+    ## 这里根据需要加载已有的权重接着训练
+    checkpoint_model = torch.load("/home/hjzd/lzz/LLM_training/logs/pretraining/2026-01-06_17-22-12_gpt124m/checkpoints/model_epoch1_step300000.pt", map_location=device) 
+    checkpoint_optimizer = torch.load("/home/hjzd/lzz/LLM_training/logs/pretraining/2026-01-06_17-22-12_gpt124m/checkpoints/optimizer_epoch1_step300000.pt", map_location=device) 
+    model.load_state_dict(checkpoint_model) 
+    optimizer.load_state_dict(checkpoint_optimizer)
+
+
+    
     num_epochs = 100 
     train_losses, val_losses, tokens_seen = train_model_simple(     
         model, train_loader, val_loader, optimizer, device,     
-        num_epochs=num_epochs, eval_freq=2000, eval_iter=15,     
+        num_epochs=num_epochs, eval_freq=10000, eval_iter=20,     
         start_context="早上出门的时候我才发现忘记带钥匙，只好又回到家里。", 
         tokenizer=tokenizer, save_epoch=1
     ) 
