@@ -14,7 +14,7 @@ import tiktoken
 run_dir = setup_run_dir(experiment="pretraining", run_name="gpt124m")
 logger = setup_logger(name="train", log_file=run_dir / "train.log")
 
-def evaluate_model(model, train_loader, val_loader, device, eval_iter):     
+def evaluate_model(model, train_loader, val_loader, device, eval_iter):
     model.eval()     
     with torch.no_grad():         
         train_loss = calc_loss_loader(
