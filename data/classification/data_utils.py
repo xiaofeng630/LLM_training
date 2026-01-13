@@ -14,3 +14,14 @@ def random_split(df, train_frac, validation_frac):
     validation_df = df[train_end:validation_end]     
     test_df = df[validation_end:]
     return train_df, validation_df, test_df
+
+
+## 用于快速查看数据文件结构
+def view_parquet(parquet_file):
+    df = pd.read_parquet(parquet_file)
+    print(df.columns)
+    print(df["text"][0])
+
+
+if __name__ == "__main__":
+    view_parquet("/home/hjzd/lzz/LLM_training/data/classification/ChnSentiCorp/test.parquet")
