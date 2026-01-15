@@ -3,6 +3,7 @@
 
 import torch
 import torch.nn as nn 
+import torch.nn.functional as F
 
 class SelfAttention_v1(nn.Module):
     def __init__(self, d_in, d_out):         
@@ -117,19 +118,35 @@ class MultiHeadAttention(nn.Module):
         values = values.transpose(1, 2)
         # print(keys)
 
-        # (b, num_heads, num_token, head_dim) @ (b, num_heads, head_dim, num_token) -> (b, num_heads, num_token, num_token)
-        attn_scores = queries @ keys.transpose(2, 3)
-        mask_bool = self.mask.bool()[:num_tokens, :num_tokens]
-        attn_scores.masked_fill_(mask_bool, -torch.inf) 
-        attn_weights = torch.softmax(attn_scores / keys.shape[-1]**0.5, dim=-1) 
-        attn_weights = self.dropout(attn_weights)
-        # print(attn_weights.shape)
-        # print(values.shape)
+        # # (b, num_heads, num_token, head_dim) @ (b, num_heads, head_dim, num_token) -> (b, num_heads, num_token, num_token)
+        # attn_scores = queries @ keys.transpose(2, 3)
+        # mask_bool = self.mask.bool()[:num_tokens, :num_tokens]
+        # attn_scores.masked_fill_(mask_bool, -torch.inf) 
+        # attn_weights = torch.softmax(attn_scores / keys.shape[-1]**0.5, dim=-1) 
+        # attn_weights = self.dropout(attn_weights)
+        # # print(attn_weights.shape)
+        # # print(values.shape)
 
-        # (b, num_token, num_heads, head_dim)
-        context_vec = (attn_weights @ values).transpose(1, 2)
-        # print(context_vec.shape)
-        context_vec = context_vec.contiguous().view(b, num_tokens, self.d_out)
-        context_vec = self.out_proj(context_vec) # (b, num_tokens, n_heads, head_dim)
-        return context_vec
+        # # (b, num_token, num_heads, head_dim)
+        # context_vec = (attn_weights @ values).transpose(1, 2)
+        # # print(context_vec.shape)
+        # context_vec = context_vec.contiguous().view(b, num_tokens, self.d_out)
+        # context_vec = self.out_proj(context_vec) # (b, num_tokens, n_heads, head_dim)
+
+
+
+
+        # 🔥 FlashAttention 真正入口
+        attn_output = F.scaled_dot_product_attention(
+            queries, keys, values,
+            attn_mask=None,        # causal 用 is_causal
+            dropout_p=self.dropout.p if self.training else 0.0,
+            is_causal=True         # GPT-style causal mask
+        )
+
+        # (b, h, L, d) → (b, L, d_out)
+        attn_output = attn_output.transpose(1, 2).contiguous()
+        attn_output = attn_output.view(b, num_tokens, self.d_out)
+        # return context_vec
+        return self.out_proj(attn_output)
 
