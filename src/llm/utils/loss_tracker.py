@@ -27,7 +27,7 @@ class LossTracker:
         self.val_steps.append(step)
         self.val_losses.append(loss)
 
-    def plot(self, filename: str = "loss.png", smooth_window: int = 5):
+    def plot(self, filename: str = "loss.png", smooth_window: int = 10):
         if not self.train_losses and not self.val_losses:
             return
 
