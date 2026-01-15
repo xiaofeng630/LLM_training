@@ -6,10 +6,10 @@ import torch
 from src.llm.model.gpt import GPTModel
 from src.llm.utils.loss_tracker import LossTracker
 from src.llm.config.gpt_configs import GPT_CONFIG_355M
-from src.llm.data.datasets import create_dataloader_jsonls, create_dataloader_bin, create_dataloader_bins
+from src.llm.tasks.pretrain.datasets import create_dataloader_jsonls, create_dataloader_bin, create_dataloader_bins
 from src.llm.utils.logger import setup_logger, setup_run_dir
 from src.llm.eval.tokenizer import token_ids_to_text, text_to_token_ids
-from src.llm.train.loss import calc_loss_batch, calc_loss_loader
+from src.llm.tasks.pretrain.loss import calc_loss_batch, calc_loss_loader
 from src.llm.eval.generate import generate_text_simple_old, generate_text_token, generate_and_print_sample
 import tiktoken
 
