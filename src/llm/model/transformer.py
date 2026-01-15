@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 from .attention import MultiHeadAttention
 
-class LayerNorm(nn.Module):     
+class LayerNorm(nn.Module):
     def __init__(self, emb_dim):         
         super().__init__()         
         self.eps = 1e-5         
