@@ -32,7 +32,7 @@ def process_one_jsonl(args):
             except Exception:
                 continue
 
-    arr = np.array(all_tokens, dtype=np.uint32)
+    arr = np.array(all_tokens, dtype=np.uint32) ## 这里尤其需要注意dtype, 这个不会影响模型的效果, 是根据tokenizer的vocab_size来定的, 定小了会有溢出风险
     arr.tofile(out_path)
 
     print(f"[saved] {out_path} | tokens={len(arr):,}")
