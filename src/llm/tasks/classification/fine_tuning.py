@@ -212,6 +212,8 @@ if __name__ == "__main__":
     ## 加载数据集
     train_loader = create_dataloader_Spam(
         "/home/hjzd/lzz/LLM_training/data/classification/sms_spam_collection/train.csv",
+        tokenizer=tokenizer,
+        pad_token_id=tokenizer.eot_token,
         batch_size=8,
         max_length=None,
         shuffle=True, 
@@ -221,6 +223,8 @@ if __name__ == "__main__":
 
     val_loader = create_dataloader_Spam(
         "/home/hjzd/lzz/LLM_training/data/classification/sms_spam_collection/val.csv",
+        tokenizer=tokenizer,
+        pad_token_id=tokenizer.eot_token,
         batch_size=8,
         max_length=None,
         shuffle=True, 
@@ -230,6 +234,8 @@ if __name__ == "__main__":
 
     test_loader = create_dataloader_Spam(
         "/home/hjzd/lzz/LLM_training/data/classification/sms_spam_collection/test.csv",
+        tokenizer=tokenizer,
+        pad_token_id=tokenizer.eot_token,
         batch_size=8,
         max_length=None,
         shuffle=True, 
