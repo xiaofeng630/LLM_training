@@ -77,7 +77,7 @@ def train_model_simple(model, train_loader, val_loader, optimizer, device, num_e
                 
                 print(f"Ep {epoch+1} (Step {global_step:06d}): "                       
                       f"Train loss {train_loss:.3f}, "                       
-                      f"Val loss {val_loss:.3f}\n"            
+                      f"Val loss {val_loss:.3f}"            
                      )
             
             if global_step % 100000 == 0:
@@ -161,7 +161,7 @@ if __name__ == "__main__":
     num_epochs = 100 
     train_losses, val_losses, tokens_seen = train_model_simple(     
         model, train_loader, val_loader, optimizer, device,     
-        num_epochs=num_epochs, eval_freq=100, eval_iter=10,     
+        num_epochs=num_epochs, eval_freq=10000, eval_iter=10,     
         start_context="早上出门的时候我才发现忘记带钥匙，只好又回到家里。", 
         tokenizer=tokenizer, save_epoch=1
     ) 
