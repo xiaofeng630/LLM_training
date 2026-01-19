@@ -64,6 +64,6 @@ def count_tokens_in_bin(
 
 if __name__ == "__main__":
     total_tokens = count_tokens_in_bin(
-    "/home/hjzd/lzz/LLM_training/data/pretrain/CCI3/data_bin/val/part_000028.bin",
+    "/home/hjzd/lzz/LLM_training/data/pretrain/CCI3/data_bin/train",
     dtype="int32"
 )
