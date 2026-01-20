@@ -17,14 +17,18 @@ from src.llm.tasks.instruction.datasets import InstructionDataset, create_datalo
 from src.llm.tasks.instruction.loss import calc_loss_batch, calc_loss_loader
 from src.llm.eval.generate import generate_text_simple_old, generate_text_token, generate_and_print_sample
 
+## 设置日志模块并记录日志
 run_dir = setup_run_dir(experiment="instruction", run_name="gpt355m")
 logger = setup_logger(name="train", log_file=run_dir / "train.log")
+
+## loss记录模块，用于实时画loss曲线图
 loss_tracker = LossTracker(run_dir / "samples")
 
+## 用于创建指令微调的数据格式（实际的格式规整应该放到具体的Dataset类中，这里主要是为了测试）
 def format_input(entry):
     instruction_text = (         
-        f"Below is an instruction that describes a task. "         
-        f"Write a response that appropriately completes the request."         
+        # f"Below is an instruction that describes a task. Write a response that appropriately completes the request."
+        f"以下是一项任务描述。请撰写一份恰当的回复来完成该任务。"
         f"\n\n### Instruction:\n{entry['instruction']}"     
     )
     input_text = (         
@@ -32,6 +36,7 @@ def format_input(entry):
     )     
     return instruction_text + input_text
 
+## 用于服务load_weights_into_gpt加载gpt2官方的权重
 def assign(left, right):
     if left.shape != right.shape:         
         raise ValueError(f"Shape mismatch. Left: {left.shape}, "                           
@@ -39,6 +44,7 @@ def assign(left, right):
         )     
     return torch.nn.Parameter(torch.tensor(right))
 
+## 用于加载gpt2官方的权重
 def load_weights_into_gpt(gpt, params):
     gpt.pos_emb.weight = assign(gpt.pos_emb.weight, params['wpe'])     
     gpt.tok_emb.weight = assign(gpt.tok_emb.weight, params['wte'])
@@ -98,6 +104,7 @@ def load_weights_into_gpt(gpt, params):
     gpt.final_norm.shift = assign(gpt.final_norm.shift, params["b"]) 
     gpt.out_head.weight = assign(gpt.out_head.weight, params["wte"])
 
+## 评估函数，用于训练中计算train_loss和val_loss
 def evaluate_model(model, train_loader, val_loader, device, eval_iter):
     model.eval()     
     with torch.no_grad():         
@@ -110,7 +117,9 @@ def evaluate_model(model, train_loader, val_loader, device, eval_iter):
         model.train()     
         return train_loss, val_loss
 
-def train_model_simple(model, train_loader, val_loader, eval_train_loader, optimizer, device, num_epochs, eval_freq, eval_iter, start_context, tokenizer, save_epoch):
+## 训练入口函数
+def train_model_simple(model, train_loader, val_loader, eval_train_loader, optimizer, device, num_epochs, eval_freq, eval_iter, start_context, tokenizer, save_epoch, save_step):
+    ## 初始化变量，两个loss数组。track_tokens_seen用于记录每次评估时模型都学到了多少的token（单位是M）
     train_losses, val_losses, track_tokens_seen = [], [], []     
     tokens_seen, global_step = 0, -1
 
@@ -119,7 +128,6 @@ def train_model_simple(model, train_loader, val_loader, eval_train_loader, optim
 
     for epoch in range(num_epochs): 
         model.train()
-        
         for input_batch, target_batch in train_loader:      
             optimizer.zero_grad()        
             with torch.autocast("cuda", dtype=torch.bfloat16):     
@@ -131,6 +139,7 @@ def train_model_simple(model, train_loader, val_loader, eval_train_loader, optim
             tokens_seen += input_batch.numel() 
             global_step += 1
             
+            ## 每隔eval_freq个step进行一次评估
             if global_step % eval_freq == 0: 
                 train_loss, val_loss = evaluate_model(                     
                     model, eval_train_loader, val_loader, device, eval_iter
@@ -162,13 +171,15 @@ def train_model_simple(model, train_loader, val_loader, eval_train_loader, optim
                       f"Val loss {val_loss:.3f}"            
                      )
             
-            if global_step % 25000 == 0:
+            ## 每隔save_step个step就保存一次模型和优化器权重
+            if global_step % save_step == 0:
                 ckpt_path = run_dir / "checkpoints" / f"model_epoch{epoch + 1}_step{global_step}.pt"
                 optimizer_path = run_dir / "checkpoints" / f"optimizer_epoch{epoch + 1}_step{global_step}.pt"
                 torch.save(model.state_dict(), ckpt_path)
                 torch.save(optimizer.state_dict(), optimizer_path)
                 logger.info(f"epoch{epoch + 1}_step{global_step}, Weigths saved successfully")
         
+        ## 每个epoch保存一次权重
         if (epoch + 1) % save_epoch == 0:
             ckpt_path = run_dir / "checkpoints" / f"model_epoch{epoch + 1}.pt"
             optimizer_path = run_dir / "checkpoints" / f"optimizer_epoch{epoch + 1}.pt"
@@ -176,27 +187,25 @@ def train_model_simple(model, train_loader, val_loader, eval_train_loader, optim
             torch.save(optimizer.state_dict(), optimizer_path)
             logger.info(f"epoch{epoch + 1}, Weigths saved successfully")
 
-        sample_text = generate_and_print_sample( 
-            model, tokenizer, device, start_context         
-        )     
     return train_losses, val_losses, track_tokens_seen
 
 if __name__ == "__main__":
-    ## 配置模型参数
+    ## 设置随机种子，方便复现
     torch.manual_seed(123)
+
+    ## 加载分词器并更新配置参数的词表大小
     tokenizer = tiktoken.get_encoding("cl100k_base")
     GPT_CONFIG_355M["vocab_size"] = tokenizer.max_token_value
-    
 
-    ## 初始化模型
+    ## 初始化模型和设备
     model = GPTModel(GPT_CONFIG_355M)
-    model.eval()
     device = torch.device("cuda:3" if torch.cuda.is_available() else "cpu")
     model.to(device)
 
-    ## 加载预训练模型权重
-    ckpt_model = torch.load("/home/hjzd/lzz/LLM_training/logs/pretraining/2026-01-16_17-24-23_gpt355m/checkpoints/model_epoch2_step950000.pt", map_location=device)
+    ## 加载预训练模型权重并且加载优化器
+    ckpt_model = torch.load("/home/hjzd/lzz/LLM_training/logs/pretraining/gpt355M-exp1/checkpoints/model_epoch2_step950000.pt", map_location=device)
     model.load_state_dict(ckpt_model)
+    optimizer = torch.optim.AdamW(model.parameters(), lr=0.00005, weight_decay=0.1)
     
 
     ## 测试是否正确加载了权重
@@ -211,7 +220,10 @@ if __name__ == "__main__":
     )
     print("Output text:\n", token_ids_to_text(token_ids, tokenizer))
 
+
+
     ## 加载数据集
+    ## 注意！这里要根据实际的数据集进行加载，因为每个数据集的存储方式和格式都不同，需要根据特定的数据集去写Dataset类
     train_loader = create_dataloader_Belle(
         "/home/hjzd/lzz/LLM_training/data/instruction/belle_data/train_150k.jsonl",
         tokenizer=tokenizer,
@@ -234,22 +246,14 @@ if __name__ == "__main__":
         num_workers=0
     )
 
-    torch.manual_seed(123)
-    with torch.no_grad():
-        train_loss = calc_loss_loader(train_loader, model, device, num_batches=5)     
-        val_loss = calc_loss_loader(val_loader, model, device, num_batches=5)
-    print("Training loss:", train_loss)
-    print("Validation loss:", val_loss) 
+
+    ## 用于在微调过程中查看推理是否正常（不是看效果，主要是看模型是否会生成正常回复而不是一堆乱码）
+    entry = {"instruction": "请根据给定的句子，找出其中的逻辑错误，并给出简要修改后的正确句子。", "input": "所有会飞的动物都是鸟。蝙蝠会飞，所以蝙蝠是鸟。"}
+    model_input = format_input(entry)
 
 
-    file_path = "/home/hjzd/lzz/LLM_training/data/instruction/simple_instruction/instruction-data.json"
-    with open(file_path, "r", encoding="utf-8") as f:
-        data = json.load(f)
-    model_input = format_input(data[0]) 
-
-
-    start_time = time.time()
-    optimizer = torch.optim.AdamW(model.parameters(), lr=0.00005, weight_decay=0.1) 
+    
+    ## 开始训练
     num_epochs = 10
     train_losses, val_losses, tokens_seen = train_model_simple(     
         model=model, 
@@ -263,8 +267,6 @@ if __name__ == "__main__":
         eval_iter=15,
         tokenizer=tokenizer,
         start_context=model_input, 
-        save_epoch=1
-        )
-    end_time = time.time() 
-    execution_time_minutes = (end_time - start_time) / 60 
-    print(f"Training completed in {execution_time_minutes:.2f} minutes.")
+        save_epoch=1,
+        save_step=50000
+    )
