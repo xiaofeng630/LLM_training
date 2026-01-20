@@ -95,7 +95,7 @@ def train_model_simple(model, train_loader, val_loader, optimizer, device, num_e
                 torch.save(optimizer.state_dict(), optimizer_path)
                 logger.info(f"epoch{epoch + 1}_step{global_step}, Weigths saved successfully")
         
-        ## 每个epoch保存一个模型
+        ## 每个epoch保存一个权重
         if (epoch + 1) % save_epoch == 0:
             ckpt_path = run_dir / "checkpoints" / f"model_epoch{epoch + 1}.pt"
             optimizer_path = run_dir / "checkpoints" / f"optimizer_epoch{epoch + 1}.pt"
