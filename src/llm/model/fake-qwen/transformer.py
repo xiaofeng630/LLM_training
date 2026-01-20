@@ -1,6 +1,17 @@
 import torch
 import torch.nn as nn
-from .attention import MultiHeadAttention
+from .attention import MultiHeadAttention, RoPEMultiHeadAttention
+
+class RMSNorm(nn.Module):
+    def __init__(self, dim, eps=1e-6):
+        super().__init__()
+        self.eps = eps
+        self.weight = nn.Parameter(torch.ones(dim))
+
+    def forward(self, x):
+        # x: (..., dim)
+        rms = torch.sqrt(x.pow(2).mean(dim=-1, keepdim=True) + self.eps)
+        return self.weight * (x / rms)
 
 class LayerNorm(nn.Module):
     def __init__(self, emb_dim):         
@@ -36,10 +47,23 @@ class FeedForward(nn.Module):
     def forward(self, x):         
         return self.layers(x)
 
+class SwiGLUFeedForward(nn.Module):
+    def __init__(self, cfg):
+        super().__init__()
+        emb_dim = cfg["emb_dim"]
+        hidden_dim = int(2 * emb_dim * 4 / 3)
+
+        self.w1 = nn.Linear(emb_dim, hidden_dim, bias=False)
+        self.w2 = nn.Linear(hidden_dim, emb_dim, bias=False)
+        self.w3 = nn.Linear(emb_dim, hidden_dim, bias=False)
+
+    def forward(self, x):
+        return self.w2(F.silu(self.w1(x)) * self.w3(x))
+
 class TransformerBlock(nn.Module): 
     def __init__(self, cfg):         
         super().__init__()         
-        self.att = MultiHeadAttention(
+        self.att = RoPEMultiHeadAttention(
              d_in=cfg["emb_dim"],             
              d_out=cfg["emb_dim"],             
              context_length=cfg["context_length"],             
@@ -47,9 +71,9 @@ class TransformerBlock(nn.Module):
              dropout=cfg["drop_rate"],             
              qkv_bias=cfg["qkv_bias"]
         ) 
-        self.ff = FeedForward(cfg)         
-        self.norm1 = LayerNorm(cfg["emb_dim"])         
-        self.norm2 = LayerNorm(cfg["emb_dim"])         
+        self.ff = SwiGLUFeedForward(cfg)
+        self.norm1 = RMSNorm(cfg["emb_dim"])         
+        self.norm2 = RMSNorm(cfg["emb_dim"])         
         self.drop_shortcut = nn.Dropout(cfg["drop_rate"])
 
     def forward(self, x):
