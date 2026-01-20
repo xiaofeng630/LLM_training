@@ -149,4 +149,3 @@ class MultiHeadAttention(nn.Module):
         attn_output = attn_output.view(b, num_tokens, self.d_out)
         
         return self.out_proj(attn_output)
-
