@@ -63,7 +63,6 @@ class CausalAttention(nn.Module):
         context_vec = attn_weights @ values 
         return context_vec
 
-
 class MultiHeadAttentionWrapper(nn.Module):
     def __init__(self, d_in, d_out, context_length,                  
                  dropout, num_heads, qkv_bias=False):         
@@ -75,7 +74,6 @@ class MultiHeadAttentionWrapper(nn.Module):
 
     def forward(self, x):         
         return torch.cat([head(x) for head in self.heads], dim=-1)
-
 
 class MultiHeadAttention(nn.Module):
     def __init__(self, d_in, d_out,                  
@@ -99,26 +97,27 @@ class MultiHeadAttention(nn.Module):
     def forward(self, x): 
         b, num_tokens, d_in = x.shape
 
-        # (batch, num_token, d_out) 
+        ## (batch, num_token, d_out) 
         keys = self.W_key(x)
         queries = self.W_query(x)
         values = self.W_value(x)
         # print(values.shape)
 
-        # (batch, num_token, num_heads, head_dim)
-        # d_out = num_heads * head_dim
+        ## (batch, num_token, num_heads, head_dim)
+        ## d_out = num_heads * head_dim
         keys = keys.view(b, num_tokens, self.num_heads, self.head_dim) 
         values = values.view(b, num_tokens, self.num_heads, self.head_dim) 
         queries = queries.view(b, num_tokens, self.num_heads, self.head_dim) 
         # print(keys.shape)
 
-        # (b, num_heads, num_token, head_dim)
+        ## (b, num_heads, num_token, head_dim)
         keys = keys.transpose(1, 2) 
         queries = queries.transpose(1, 2) 
         values = values.transpose(1, 2)
         # print(keys)
 
-        # # (b, num_heads, num_token, head_dim) @ (b, num_heads, head_dim, num_token) -> (b, num_heads, num_token, num_token)
+        ## 1、下面这段为原始的计算方式，更好理解过程但是训练会变慢
+        # ## (b, num_heads, num_token, head_dim) @ (b, num_heads, head_dim, num_token) -> (b, num_heads, num_token, num_token)
         # attn_scores = queries @ keys.transpose(2, 3)
         # mask_bool = self.mask.bool()[:num_tokens, :num_tokens]
         # attn_scores.masked_fill_(mask_bool, -torch.inf) 
@@ -127,16 +126,17 @@ class MultiHeadAttention(nn.Module):
         # # print(attn_weights.shape)
         # # print(values.shape)
 
-        # # (b, num_token, num_heads, head_dim)
+        # ## (b, num_token, num_heads, head_dim)
         # context_vec = (attn_weights @ values).transpose(1, 2)
         # # print(context_vec.shape)
         # context_vec = context_vec.contiguous().view(b, num_tokens, self.d_out)
         # context_vec = self.out_proj(context_vec) # (b, num_tokens, n_heads, head_dim)
+        # return context_vec
 
 
 
-
-        # 🔥 FlashAttention 真正入口
+        ## 2、下面是FlashAttention的实现方式，可以加快训练速度，具体的不解释，请自行了解
+        ## FlashAttention入口
         attn_output = F.scaled_dot_product_attention(
             queries, keys, values,
             attn_mask=None,        # causal 用 is_causal
@@ -144,9 +144,9 @@ class MultiHeadAttention(nn.Module):
             is_causal=True         # GPT-style causal mask
         )
 
-        # (b, h, L, d) → (b, L, d_out)
+        ## (b, h, L, d) → (b, L, d_out)
         attn_output = attn_output.transpose(1, 2).contiguous()
         attn_output = attn_output.view(b, num_tokens, self.d_out)
-        # return context_vec
+        
         return self.out_proj(attn_output)
 
