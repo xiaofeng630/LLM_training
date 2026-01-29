@@ -1,11 +1,33 @@
 import os
 import json
+import re
 from collections import Counter
 import random
 from pathlib import Path
 from typing import Tuple
+from typing import Union
 
-def format_input(entry):
+## Phi-3 指令微调格式
+def format_input_Phi(entry):
+    user = entry[0]
+    assistant = entry[1]
+
+    user_content = user["content"]
+    assistant_content = assistant["content"]
+
+    user_text = (
+        "<User>\n"
+        f"{user_content}\n"
+        "</User>\n\n"
+        "<Assistant>\n"
+        f"{assistant_content}\n"
+        "</Assistant>"
+    )
+    return user_text
+
+
+## Alpaca 指令微调格式
+def format_input_Alpaca(entry):
     instruction_text = (         
         f"Below is an instruction that describes a task. "         
         f"Write a response that appropriately completes the request."         
@@ -16,6 +38,8 @@ def format_input(entry):
     )     
     return instruction_text + input_text
 
+
+## 切分jsonl，创建训练、验证、测试集
 def split_jsonl_dataset(
     input_path: str,
     output_dir: str,
@@ -84,6 +108,8 @@ def split_jsonl_dataset(
 
     return len(train_data), len(val_data), len(test_data)
 
+
+## 从jsonl中随机取出样本，用于构建小数据集
 def sample_jsonl_dataset(
     input_path: str,
     output_path: str,
@@ -135,6 +161,96 @@ def sample_jsonl_dataset(
         f"from {input_path} -> {output_path}"
     )
 
+
+## 查看jsonl前n行的数据
+def preview_jsonl(file_path, n=5):
+    """
+    查看 jsonl 文件前 n 行
+    """
+    with open(file_path, "r", encoding="utf-8") as f:
+        for i, line in enumerate(f):
+            if i >= n:
+                break
+            data = json.loads(line)
+            print(f"---- line {i+1} ----")
+            print(data)
+
+
+## 用于检查单个jsonl文件格式是否正确
+def is_valid_jsonl_file(file_path: str) -> bool:
+    """
+    检查单个 jsonl 文件是否格式正确
+    - 后缀为 .jsonl
+    - 每一行都是合法 JSON
+    """
+    if not file_path.endswith(".jsonl"):
+        return False
+
+    try:
+        with open(file_path, "r", encoding="utf-8") as f:
+            for line_num, line in enumerate(f, start=1):
+                line = line.strip()
+                if not line:
+                    continue  # 允许空行
+                json.loads(line)
+        return True
+    except Exception as e:
+        print(f"[格式错误] 文件: {file_path}, 错误: {e}")
+        return False
+
+
+## 统计 jsonl 文件或文件夹中的数据条数
+def count_jsonl_samples(path: Union[str, os.PathLike]) -> int:
+    """
+    统计 jsonl 文件或文件夹中的数据条数
+
+    规则：
+    - 输入是文件：必须是合法 jsonl，才统计
+    - 输入是文件夹：
+        - 文件夹下必须全部是合法 jsonl 文件
+        - 否则直接返回 0
+    """
+    path = str(path)
+
+    # 情况 1：单个文件
+    if os.path.isfile(path):
+        if not is_valid_jsonl_file(path):
+            print("[终止] 文件不是合法的 jsonl")
+            return 0
+
+        with open(path, "r", encoding="utf-8") as f:
+            return sum(1 for line in f if line.strip())
+
+    # 情况 2：文件夹
+    elif os.path.isdir(path):
+        files = [
+            os.path.join(path, fname)
+            for fname in os.listdir(path)
+            if os.path.isfile(os.path.join(path, fname))
+        ]
+
+        if not files:
+            print("[终止] 文件夹为空")
+            return 0
+
+        # 先检查所有文件是否为合法 jsonl
+        for file_path in files:
+            if not is_valid_jsonl_file(file_path):
+                print("[终止] 文件夹中存在非法 jsonl 文件")
+                return 0
+
+        # 所有文件合法，开始统计
+        total_count = 0
+        for file_path in files:
+            with open(file_path, "r", encoding="utf-8") as f:
+                total_count += sum(1 for line in f if line.strip())
+
+        return total_count
+
+    else:
+        print("[错误] 路径不存在")
+        return 0
+
 if __name__ == "__main__":
     # train_n, val_n, test_n = split_jsonl_dataset(
     #     input_path="/home/hjzd/lzz/LLM_training/data/instruction/belle_data/Belle_open_source_0.5M.json",
@@ -145,15 +261,30 @@ if __name__ == "__main__":
     #     seed=42,
     # )
 
+    # print(count_jsonl_samples("/home/hjzd/lzz/LLM_training/data/instruction/minimind_dataset/sft_1024.jsonl"))
+    # preview_jsonl("/home/hjzd/lzz/LLM_training/data/instruction/minimind_dataset/sft_1024.jsonl", 3)
+
+    # filter_chinese_jsonl(
+    #     input_path="/home/hjzd/lzz/LLM_training/data/instruction/minimind_dataset/sft_1024.jsonl",
+    #     output_path="/home/hjzd/lzz/LLM_training/data/instruction/minimind_dataset/sft_1024_zh.jsonl",
+    # )
+
+
     sample_jsonl_dataset(
-        input_path="/home/hjzd/lzz/LLM_training/data/instruction/belle_data/train.jsonl",
-        output_path="/home/hjzd/lzz/LLM_training/data/instruction/belle_data/train_150k.jsonl",
-        sample_size=150_000,
+        input_path="/home/hjzd/lzz/LLM_training/data/instruction/belle_data/test.jsonl",
+        output_path="/home/hjzd/lzz/LLM_training/data/instruction/belle_data/test_2.jsonl",
+        sample_size=2,
         seed=42,
     )
 
-# print(f"Train: {train_n}, Val: {val_n}, Test: {test_n}")
-    
+
+    # from datasets import load_dataset
+
+    # ds = load_dataset("/home/hjzd/lzz/LLM_training/data/instruction/BelleGroup/train_0.5M_CN")
+
+    # print(ds)
+    # print(ds["train"][0])
+
     
 
 
