@@ -168,33 +168,33 @@ class MultiHeadAttention(nn.Module):
         # --------------------------------------------------
         # 方案 1：手写 attention（直观，但慢）——你已经写得很标准
         # --------------------------------------------------
-        ## (b, num_heads, num_token, head_dim) @ (b, num_heads, head_dim, num_token) -> (b, num_heads, num_token, num_token)
-        ## 每个 head 内：当前 token 对所有 token 的打分
-        attn_scores = queries @ keys.transpose(2, 3)
+        # ## (b, num_heads, num_token, head_dim) @ (b, num_heads, head_dim, num_token) -> (b, num_heads, num_token, num_token)
+        # ## 每个 head 内：当前 token 对所有 token 的打分
+        # attn_scores = queries @ keys.transpose(2, 3)
 
-        ## 取出与当前序列长度匹配的 causal mask。True 表示“不能看（未来 token）”
-        mask_bool = self.mask.bool()[:num_tokens, :num_tokens]
+        # ## 取出与当前序列长度匹配的 causal mask。True 表示“不能看（未来 token）”
+        # mask_bool = self.mask.bool()[:num_tokens, :num_tokens]
 
-        ## 对未来位置打 -inf，softmax 后权重变为 0
-        attn_scores.masked_fill_(mask_bool, -torch.inf)
+        # ## 对未来位置打 -inf，softmax 后权重变为 0
+        # attn_scores.masked_fill_(mask_bool, -torch.inf)
 
-        ## 缩放 + softmax。每一行变成：对所有 token 的注意力分布
-        attn_weights = torch.softmax(attn_scores / keys.shape[-1]**0.5, dim=-1)
+        # ## 缩放 + softmax。每一行变成：对所有 token 的注意力分布
+        # attn_weights = torch.softmax(attn_scores / keys.shape[-1]**0.5, dim=-1)
 
-        ## 对注意力权重做 dropout（正则化关注关系）
-        attn_weights = self.dropout(attn_weights)
+        # ## 对注意力权重做 dropout（正则化关注关系）
+        # attn_weights = self.dropout(attn_weights)
 
-        ## (b, h, L, L) @ (b, h, L, d) → (b, h, L, d) → (b, L, h, d)
-        ## 每个 token 在每个 head 上加权汇聚 value
-        context_vec = (attn_weights @ values).transpose(1, 2)
+        # ## (b, h, L, L) @ (b, h, L, d) → (b, h, L, d) → (b, L, h, d)
+        # ## 每个 token 在每个 head 上加权汇聚 value
+        # context_vec = (attn_weights @ values).transpose(1, 2)
 
-        ## (b, L, h, d) → (b, L, d_out)
-        ## 拼接所有 head
-        context_vec = context_vec.contiguous().view(b, num_tokens, self.d_out)
+        # ## (b, L, h, d) → (b, L, d_out)
+        # ## 拼接所有 head
+        # context_vec = context_vec.contiguous().view(b, num_tokens, self.d_out)
 
-        ## 最后一层线性映射，混合各个 head 的信息
-        context_vec = self.out_proj(context_vec) # (b, num_tokens, n_heads, head_dim)
-        return context_vec
+        # ## 最后一层线性映射，混合各个 head 的信息
+        # context_vec = self.out_proj(context_vec) # (b, num_tokens, n_heads, head_dim)
+        # return context_vec
 
 
 
