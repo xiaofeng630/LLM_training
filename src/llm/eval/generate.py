@@ -110,14 +110,14 @@ def generate_text_simple_old(model, idx, max_new_tokens, context_size, temperatu
     return idx
 
 ## 输入文本和模型，直接返回模型生成的文本，训练时测试用
-def generate_and_print_sample(model, tokenizer, device, start_context):     
+def generate_and_print_sample(model, tokenizer, device, start_context, eos_id):     
     model.eval()     
     context_size = model.pos_emb.weight.shape[0]     
     encoded = text_to_token_ids(start_context, tokenizer).to(device)     
     with torch.no_grad():         
         token_ids = generate_text_token(             
             model=model, idx=encoded,             
-            max_new_tokens=70, context_size=context_size         
+            max_new_tokens=1024, context_size=context_size, eos_id=eos_id       
         )     
     decoded_text = token_ids_to_text(token_ids, tokenizer) 
     decoded_text = decoded_text.replace("\n", " ")
